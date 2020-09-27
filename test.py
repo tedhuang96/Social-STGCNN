@@ -27,7 +27,7 @@ def test(KSTEPS=20):
         batch = [tensor.cuda() for tensor in batch]
         obs_traj, pred_traj_gt, obs_traj_rel, pred_traj_gt_rel, non_linear_ped,\
          loss_mask,V_obs,A_obs,V_tr,A_tr = batch
-
+        # A_tr is actually never used.
 
         num_of_objs = obs_traj_rel.shape[1]
 

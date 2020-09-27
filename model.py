@@ -63,8 +63,14 @@ class ConvTemporalGraphical(nn.Module):
 
     def forward(self, x, A):
         assert A.size(0) == self.kernel_size
-        x = self.conv(x)
-        x = torch.einsum('nctv,tvw->nctw', (x, A))
+        x = self.conv(x) # zhe # convolution with (1, 1) kernel means linear layer
+        x = torch.einsum('nctv,tvw->nctw', (x, A)) # zhe # sum up the information from
+        # zhe # neighbors of targets to the targets. A is adjacency matrix.
+        # zhe # in (K, V, V), K is actually T_obs = 8, V is the number of pedestrians.
+        #
+        # zhe # Though we see Output[0]: Outpu graph sequence in :math:`(N, out_channels, T_{out}, V)` format
+        # zhe # Actually T_out and T_in are the same.
+        # zhe # T_obs to T_pred is not handled by gcn. It is handled by txpcnn.
         return x.contiguous(), A
     
 
@@ -109,7 +115,9 @@ class st_gcn(nn.Module):
         self.gcn = ConvTemporalGraphical(in_channels, out_channels,
                                          kernel_size[1])
         
-
+        # zhe # kernel_size[0] is the kernel size along temporal dimension.
+        # zhe # kernel_size[1] is T_obs = 8, from the definition of social_stgcnn.
+        # zhe # tcn should be temporal convolution net. # it is taking into account the information in the neighbor of time dimension.
         self.tcn = nn.Sequential(
             nn.BatchNorm2d(out_channels),
             nn.PReLU(),
@@ -125,12 +133,14 @@ class st_gcn(nn.Module):
         )
 
         if not residual:
-            self.residual = lambda x: 0
+            # zhe # if no residual, just let tcn learns the desired mapping.
+            self.residual = lambda x: 0 # zhe # lambda define the function in an anonymous way. (simpler definition of function)
 
         elif (in_channels == out_channels) and (stride == 1):
             self.residual = lambda x: x
 
         else:
+            # zhe # if channel dimension does not match, use a convolution method to force them to match.
             self.residual = nn.Sequential(
                 nn.Conv2d(
                     in_channels,
@@ -147,7 +157,7 @@ class st_gcn(nn.Module):
         res = self.residual(x)
         x, A = self.gcn(x, A)
 
-        x = self.tcn(x) + res
+        x = self.tcn(x) + res # zhe # residual learning
         
         if not self.use_mdn:
             x = self.prelu(x)
@@ -160,13 +170,13 @@ class social_stgcnn(nn.Module):
         super(social_stgcnn,self).__init__()
         self.n_stgcnn= n_stgcnn
         self.n_txpcnn = n_txpcnn
-                
+        
         self.st_gcns = nn.ModuleList()
         self.st_gcns.append(st_gcn(input_feat,output_feat,(kernel_size,seq_len)))
         for j in range(1,self.n_stgcnn):
             self.st_gcns.append(st_gcn(output_feat,output_feat,(kernel_size,seq_len)))
         
-        self.tpcnns = nn.ModuleList()
+        self.tpcnns = nn.ModuleList() # zhe # tpcnns are generally a bunch of conv layers to transform seq_len to pred_seq_len.
         self.tpcnns.append(nn.Conv2d(seq_len,pred_seq_len,3,padding=1))
         for j in range(1,self.n_txpcnn):
             self.tpcnns.append(nn.Conv2d(pred_seq_len,pred_seq_len,3,padding=1))
@@ -180,19 +190,21 @@ class social_stgcnn(nn.Module):
 
         
     def forward(self,v,a):
-
+        # zhe # first use gcns to encode nodes serveral times
         for k in range(self.n_stgcnn):
             v,a = self.st_gcns[k](v,a)
             
-        v = v.view(v.shape[0],v.shape[2],v.shape[1],v.shape[3])
-        
-        v = self.prelus[0](self.tpcnns[0](v))
+        v = v.view(v.shape[0],v.shape[2],v.shape[1],v.shape[3]) # zhe # change (N, C, T, W)
+        # zhe # to (N, T, C, W) # since now we want to transform T_obs to T_pred.
+        # zhe # we can change that by using channels in conv2d to represent them.
 
+        v = self.prelus[0](self.tpcnns[0](v))
+        # zhe # use several conv layers to further process them.
         for k in range(1,self.n_txpcnn-1):
             v =  self.prelus[k](self.tpcnns[k](v)) + v
             
         v = self.tpcnn_ouput(v)
-        v = v.view(v.shape[0],v.shape[2],v.shape[1],v.shape[3])
-        
+        v = v.view(v.shape[0],v.shape[2],v.shape[1],v.shape[3]) # zhe # change it back to (N, C, T, W) # but convolution over 3 people, and final dimension is still 5, not 2.
+        # zhe # they use 5 as the output because they use mean_x, mean_y, sigma_x, sigma_y, ro.
         
         return v,a

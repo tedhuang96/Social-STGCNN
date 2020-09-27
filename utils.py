@@ -48,6 +48,8 @@ def seq_to_graph(seq_,seq_rel,norm_lap_matr = True):
         if norm_lap_matr: 
             G = nx.from_numpy_matrix(A[s,:,:])
             A[s,:,:] = nx.normalized_laplacian_matrix(G).toarray()
+            # zhe # Someone on the github issues and I spotted that they actually use the function wrong.
+            # zhe # so they actually have a negative value for the attention.
             
     return torch.from_numpy(V).type(torch.float),\
            torch.from_numpy(A).type(torch.float)
