@@ -133,7 +133,7 @@ print("*"*50)
 print('Number of samples:',KSTEPS)
 print("*"*50)
 
-
+print(len(paths))
 
 
 for feta in range(len(paths)):
@@ -199,6 +199,5 @@ for feta in range(len(paths)):
 
 
     print("*"*50)
-
     print("Avg ADE:",sum(ade_ls)/5)
     print("Avg FDE:",sum(fde_ls)/5)
